@@ -16,17 +16,18 @@ Copyright FirePlume, All Rights Reserved. Email: fireplume@126.com
 <a name="fponlinesystem"></a>
 ## FPOnlineSystem
 
-管理服务器和会话，处理服务器玩家存档并生成玩家
+管理服务器和会话，加载/保存服务器存档和玩家存档并生成玩家
 
 * **此模块的主要类**
 
 |类名|描述|
 |:-:|:-:|
 |FPOnlineManagerSubsystem|联机管理子系统：专用服务器创建会话和地图，客户端读取玩家ID和名称|
-|FPOnlineServerSubsystem|服务器子系统：管理服务器数据，读取服务器玩家存档|
+|FPOnlineServerSubsystem|服务器子系统：管理服务器数据，加载/保存服务器和玩家存档|
 |FPOnlineSessionsSubsystem|会话子系统：管理会话|
 |FPOnlinePlayerComponent|联机玩家组件：处理服务器玩家存档并生成玩家，仅支持添加给`APlayerController`|
 |FPOnlinePlayerInterface|联机玩家接口，仅支持添加给`APlayerController`，重写接口函数`GetOnlinePlayerComponent()`来和系统内部进行交互|
+|FPOnlineSaveServerArchive|保存服务器存档，继承此类添加要保存的服务器存档|
 |FPOnlineDedicatedServerSettings|专用服务器设置，保存在ServerSettings.ini中|
 
 * **存档和配置文件的读取保存时机**
@@ -34,7 +35,7 @@ Copyright FirePlume, All Rights Reserved. Email: fireplume@126.com
 |名称|功能|执行端|读取时机|保存时机|
 |:-:|:-:|:-:|:-:|:-:|
 |UserSettings.sav|保存玩家信息，主要包括玩家ID和名称，玩家ID不支持修改|客户端|游戏启动时|修改时|
-|ServerSettings.sav|保存服务器设置，主要包括玩家信息列表和服务器时间|服务器|创建服务器|玩家退出游戏、退出服务器、周期性保存|
+|ServerArchive.sav|保存服务器存档，主要包括玩家信息列表和服务器时间|服务器|创建服务器|玩家退出游戏、退出服务器、周期性保存|
 |Player_"玩家ID".sav|保存玩家游戏数据(类如：位置、属性等)，每个玩家对应一个存档|服务器|玩家加入游戏|更换`Pawn`(除了加入游戏更换`Pawn`)、玩家退出游戏、周期性保存|
 |ServerSettings.ini|专用服务器配置文件|服务器|创建专用服务器|手动修改|
 
@@ -84,31 +85,54 @@ bStartAfterCreate=False
 |MainMenu|`TSoftObjectPtr<UWorld>`|主菜单地图|
 |Maps|`TArray<TSoftObjectPtr<UWorld>>`|可以切换的地图，专用服务器可以通过ServerSettings.ini设置要切换的地图名称|
 |ServerSaveCycle|`float`|服务器保存周期，专用服务器在ServerSettings.ini中设置|
+|SaveServerDataClass|`TSubclassOf<UFPOnlineSaveServerArchive>`|保存服务器数据的类，服务器用来保存服务器存档|
 |SavePlayerDataClass|`TSubclassOf<USaveGame>`|保存玩家数据的类，服务器用来保存玩家存档|
-|DefaultChangePawnClass|`TSubclassOf<APawn>`|加入游戏要更换的APawn类；AGameModeBase::DefaultPawnClass会失效，建议把DefaultPawnClass改为APawn|
 
 ![FPOnlineSystemSettings](https://github.com/FirePlume126/FP_OnlineSystem/blob/main/Images/FPOnlineSystemSettings.png)
 
-2、给需要联机的`APlayerController`添加`FPOnlinePlayerComponent`组件，并添加`FPOnlinePlayerInterface`接口，重写接口函数`GetOnlinePlayerComponent()`。
+2、在`AGameModeBase`绑定服务器存档更新委托并初始化服务器，在`APlayerController::OnUnPossess()`中调用`UFPOnlinePlayerComponent::WriteSavePlayerData()`
+
+```c++
+void AMyGameModeBase::InitGame(const FString& MapName, const FString& Options, FString& ErrorMessage)
+{
+	Super::InitGame(MapName, Options, ErrorMessage);
+	if (UFPOnlineServerSubsystem* ServerSubsystem = UFPOnlineFunctionLibrary::GetServerSubsystem(this))
+	{
+		ServerSubsystem->OnServerDataOperationDelegate.AddDynamic(this, &AMyGameModeBase::HandleServerServerData);
+		ServerSubsystem->InitServer();
+	}
+}
+
+void AMyGameModeBase::HandleServerServerData(UFPOnlineSaveServerArchive* ServerArchiveObject, EFPOnlinePlayerDataOperation Operation)
+{
+	if (UMySaveServerData* SaveServerData = Cast<UMySaveServerData>(ServerArchiveObject))
+	{
+		if (Operation == EFPOnlinePlayerDataOperation::Load)
+		{
+			// 加载使用服务器存档
+		}
+		else if (Operation == EFPOnlinePlayerDataOperation::Save)
+		{
+			// 编写保存服务器存档
+		}
+	}
+}
+
+void AMyPlayerController::OnUnPossess()
+{
+	OnlinePlayerComp->WriteSavePlayerData();
+	Super::OnUnPossess();
+}
+```
+
+3、给需要联机的`APlayerController`添加`FPOnlinePlayerComponent`组件，并添加`FPOnlinePlayerInterface`接口，重写接口函数`GetOnlinePlayerComponent()`。
 可以根据需要绑定组件的委托或调用组件的函数
 ```c++
 // .h
-
-// 玩家数据操作
-UENUM(BlueprintType)
-enum class EFPOnlinePlayerDataOperation : uint8
-{
-	// 加载存档
-	Load,
-
-	// 保存存档
-	Save,
-};
-
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FFPOnlinePlayerSimpleDelegate);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FFPOnlinePlayerDataOperationDelegate, USaveGame*, NewSaveObject, EFPOnlinePlayerDataOperation, Operation);
 
-// 玩家数据操作委托，把NewSaveObject转换成UFPOnlineProjectSettings::SavePlayerInfoClass后加载、保存玩家存档
+// 玩家数据操作委托，把NewSaveObject转换成UFPOnlineProjectSettings::SavePlayerInfoClass后加载/保存玩家存档
 UPROPERTY(BlueprintAssignable, BlueprintAuthorityOnly, Category = "FPOnline")
 FFPOnlinePlayerDataOperationDelegate OnPlayerDataOperationDelegate;
 
@@ -140,35 +164,7 @@ UFUNCTION(BlueprintCallable, Category = "FPOnline")
 void ChangeCharacter(TSubclassOf<APawn> NewPawnClass = nullptr, bool bIsPlayerStart = false, const FTransform& InSpawnTransform = FTransform());
 ```
 
-3、在`AGameModeBase`初始化服务器，在`APlayerController::OnUnPossess()`中调用`UFPOnlinePlayerComponent::WriteSavePlayerData()`。完成这些，存档功能就可以正常使用
-
-```c++
-void AMyGameModeBase::InitGame(const FString& MapName, const FString& Options, FString& ErrorMessage)
-{
-	Super::InitGame(MapName, Options, ErrorMessage);
-	UFPOnlineFunctionLibrary::InitServer(this);
-}
-
-void AMyGameModeBase::Logout(AController* Exiting)
-{
-	if (APlayerController* PlayerController = Cast<APlayerController>(Exiting))
-	{
-		UFPOnlineFunctionLibrary::PlayerExitGame(this, PlayerController);
-	}
-
-	Super::Logout(Exiting);
-}
-
-void AMyPlayerController::OnUnPossess()
-{
-	OnlinePlayerComp->WriteSavePlayerData();
-	Super::OnUnPossess();
-}
-
-```
-
 4、调用UFPOnlineFunctionLibrary的函数切换地图或调用子系统功能，这些函数可以根据情况使用
-
 ```c++
 // 获取联机玩家组件
 // @param InPlayerController 玩家控制器
@@ -216,14 +212,6 @@ static void OpenMainMenu(const UObject* WorldContextObject);
 
 //====================================子系统功能====================================>>
 
-// 初始化服务器：在AGameModeBase::InitGame()中调用
-UFUNCTION(BlueprintCallable, meta = (WorldContext = "WorldContextObject"), Category = "FPOnline")
-static void InitServer(const UObject* WorldContextObject);
-
-// 玩家离开游戏，在AGameModeBase::Logout()中调用
-UFUNCTION(BlueprintCallable, meta = (WorldContext = "WorldContextObject"), Category = "FPOnline")
-static void PlayerExitGame(const UObject* WorldContextObject, APlayerController* InPlayer);
-
 // 玩家升级时更新
 UFUNCTION(BlueprintCallable, meta = (WorldContext = "WorldContextObject"), Category = "FPOnline")
 static void UpdateWhenUpLevelPlayer(const UObject* WorldContextObject, int32 InPlayerId, int32 InLevel);
@@ -252,10 +240,10 @@ static void SetServerTimeSeconds(const UObject* WorldContextObject, int32 InTime
 UFUNCTION(BlueprintCallable, meta = (WorldContext = "WorldContextObject"), Category = "FPOnline")
 static int32 GetServerTimeSeconds(const UObject* WorldContextObject);
 
-// 玩家或AI死亡时调用
-// @param RespawnDelay 复活时间，等于0时立即复活
+// 玩家Pawn死亡时调用
+// @param InRespawnDelay 复活时间，等于0时立即复活
 UFUNCTION(BlueprintCallable, meta = (WorldContext = "WorldContextObject"), Category = "FPOnline")
-static void PawnDied(const UObject* WorldContextObject, AController* InController, float InRespawnDelay = 0.0f);
+static void PlayerPawnDied(const UObject* WorldContextObject, APlayerController* InPlayer, float InRespawnDelay = 0.0f);
 
 // 设置玩家ID：本地调用，可以通过APlayerState获取玩家ID
 UFUNCTION(BlueprintCallable, meta = (WorldContext = "WorldContextObject"), Category = "FPOnline")
@@ -297,12 +285,12 @@ void StartSession();
 void UpdateSession(const FFPOnlineCreateSessionData& NewCreateSessionData);
 
 // 完成以上事件调用的委托
-FFPOnlineOnCreateSessionComplete OnlineOnCreateSessionComplete;
-FFPOnlineOnFindSessionsComplete OnlineOnFindSessionsComplete;
-FFPOnlineOnJoinSessionComplete OnlineOnJoinSessionComplete;
-FFPOnlineOnDestroySessionComplete OnlineOnDestroySessionComplete;
-FFPOnlineOnStartSessionComplete OnlineOnStartSessionComplete;
-FFPOnlineOnUpdateSessionComplete OnlineOnUpdateSessionComplete;
+FFPOnlineCreateSessionCompleteDelegate OnCreateSessionCompleteDelegate;
+FFPOnlineFindSessionsCompleteDelegate OnFindSessionsCompleteDelegate;
+FFPOnlineJoinSessionCompleteDelegate OnJoinSessionCompleteDelegate;
+FFPOnlineDestroySessionCompleteDelegate OnDestroySessionCompleteDelegate;
+FFPOnlineStartSessionCompleteDelegate OnStartSessionCompleteDelegate;
+FFPOnlineUpdateSessionCompleteDelegate OnUpdateSessionCompleteDelegate;
 ```
 
 6、没联机的时候(开始游戏界面)，`APlayerController`不需要继承`FPOnlinePlayerInterface`和添加`FPOnlinePlayerComponent`，这时候如果要获取ID和名称，可以通过`FPOnlineManagerSubsystem`直接获取。也可以设置给玩家状态后，再通过玩家状态获取
