@@ -4,12 +4,13 @@
 * **插件未开源**
 
 ## 作者信息
-Copyright FirePlume, All Rights Reserved. Email: fireplume@126.com
- 
-作者网址：
-[Bilibili](https://space.bilibili.com/395084718)、
-[YouTube](https://www.youtube.com/@FirePlume126)、
-[GitHub](https://www.github.com/FirePlume126)
+
+Copyright FirePlume, All Rights Reserved.
+
+Email: fireplume@126.com<br>
+GitHub: [FirePlume126](https://www.github.com/FirePlume126)<br>
+Bilibili: [火羽FP](https://space.bilibili.com/395084718)<br>
+YouTube: [FirePlume126](https://www.youtube.com/@FirePlume126)
 
 **[返回目录](https://www.github.com/FirePlume126/FP_Readme#Directory)**
 
@@ -35,7 +36,7 @@ Copyright FirePlume, All Rights Reserved. Email: fireplume@126.com
 |名称|功能|执行端|读取时机|保存时机|
 |:-:|:-:|:-:|:-:|:-:|
 |UserSettings.sav|保存玩家信息，主要包括玩家ID和名称，玩家ID不支持修改|客户端|游戏启动时|修改时|
-|ServerArchive.sav|保存服务器存档，主要包括玩家信息列表和服务器时间|服务器|创建服务器|玩家退出游戏、退出服务器、周期性保存|
+|ServerArchive_地图名称.sav|保存服务器存档，主要包括玩家信息列表、服务器时间和自定义服务器数据|服务器|创建服务器|玩家退出游戏、退出服务器、周期性保存|
 |Player_"玩家ID".sav|保存玩家游戏数据(类如：位置、属性等)，每个玩家对应一个存档|服务器|玩家加入游戏|更换`Pawn`(除了加入游戏更换`Pawn`)、玩家退出游戏、周期性保存|
 |ServerSettings.ini|专用服务器配置文件|服务器|创建专用服务器|手动修改|
 
