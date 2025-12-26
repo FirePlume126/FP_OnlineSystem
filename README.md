@@ -99,7 +99,7 @@ void AMyGameModeBase::InitGame(const FString& MapName, const FString& Options, F
 	Super::InitGame(MapName, Options, ErrorMessage);
 	if (UFPOnlineServerSubsystem* ServerSubsystem = UFPOnlineFunctionLibrary::GetServerSubsystem(this))
 	{
-		ServerSubsystem->OnServerDataOperationDelegate.AddDynamic(this, &AMyGameModeBase::HandleServerServerData);
+		ServerSubsystem->OnServerDataOperation.AddDynamic(this, &AMyGameModeBase::HandleServerServerData);
 		ServerSubsystem->InitServer();
 	}
 }
@@ -135,25 +135,25 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FFPOnlinePlayerDataOperationDelegat
 
 // 玩家数据操作委托，把NewSaveObject转换成UFPOnlineProjectSettings::SavePlayerInfoClass后加载/保存玩家存档
 UPROPERTY(BlueprintAssignable, BlueprintAuthorityOnly, Category = "FPOnline")
-FFPOnlinePlayerDataOperationDelegate OnPlayerDataOperationDelegate;
+FFPOnlinePlayerDataOperationDelegate OnPlayerDataOperation;
 
 // 禁止玩家加入游戏委托，不绑定此委托玩家会直接退出游戏，没有拉黑提示(仅在本地执行)
 UPROPERTY(BlueprintAssignable, Category = "FPOnline")
-FFPOnlinePlayerSimpleDelegate OnBanPlayerJoinGameDelegate;
+FFPOnlinePlayerSimpleDelegate OnBanPlayerJoinGame;
 
 // 加入游戏更换Pawn完成委托，绑定此委托执行让屏幕亮起来的逻辑(仅在本地执行)
 UPROPERTY(BlueprintAssignable, Category = "FPOnline")
-FFPOnlinePlayerSimpleDelegate OnJoinGameChangePawnCompletedDelegate;
+FFPOnlinePlayerSimpleDelegate OnJoinGameChangePawnCompleted;
 
 // 检测世界分区流送，加载流送完成后生成角色
 UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "FPOnline")
 bool bCheckWorldPartitionStreaming = true;
 
-// 加入游戏要更换的APawn类，在委托OnPlayerDataOperationDelegate加载存档时，修改此变量可以生成玩家职业对应的Pawn
+// 加入游戏要更换的APawn类，在委托OnPlayerDataOperation加载存档时，修改此变量可以生成玩家职业对应的Pawn
 UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "FPOnline")
 TSubclassOf<APawn> PlayerPawnClass;
 
-// 生成角色的变换，在委托OnPlayerDataOperationDelegate加载存档时，修改此变量可以在此位置生成Pawn
+// 生成角色的变换，在委托OnPlayerDataOperation加载存档时，修改此变量可以在此位置生成Pawn
 UPROPERTY(BlueprintReadWrite, Category = "FPOnline")
 FTransform CharacterTransform;
 
@@ -286,12 +286,12 @@ void StartSession();
 void UpdateSession(const FFPOnlineCreateSessionData& NewCreateSessionData);
 
 // 完成以上事件调用的委托
-FFPOnlineCreateSessionCompleteDelegate OnCreateSessionCompleteDelegate;
-FFPOnlineFindSessionsCompleteDelegate OnFindSessionsCompleteDelegate;
-FFPOnlineJoinSessionCompleteDelegate OnJoinSessionCompleteDelegate;
-FFPOnlineDestroySessionCompleteDelegate OnDestroySessionCompleteDelegate;
-FFPOnlineStartSessionCompleteDelegate OnStartSessionCompleteDelegate;
-FFPOnlineUpdateSessionCompleteDelegate OnUpdateSessionCompleteDelegate;
+FFPOnlineCreateSessionCompleteDelegate OnCreateSessionComplete;
+FFPOnlineFindSessionsCompleteDelegate OnFindSessionsComplete;
+FFPOnlineJoinSessionCompleteDelegate OnJoinSessionComplete;
+FFPOnlineDestroySessionCompleteDelegate OnDestroySessionComplete;
+FFPOnlineStartSessionCompleteDelegate OnStartSessionComplete;
+FFPOnlineUpdateSessionCompleteDelegate OnUpdateSessionComplete;
 ```
 
 6、没联机的时候(开始游戏界面)，`APlayerController`不需要继承`FPOnlinePlayerInterface`和添加`FPOnlinePlayerComponent`，这时候如果要获取ID和名称，可以通过`FPOnlineManagerSubsystem`直接获取。也可以设置给玩家状态后，再通过玩家状态获取
@@ -313,7 +313,7 @@ void AMyPlayerState::BeginPlay()
 ```c++
 // 接收聊天消息委托，绑定委托后把消息添加到UI(仅在本地执行)
 UPROPERTY(BlueprintAssignable, Category = "FPOnline")
-FFPOnlinePlayerReceiveMessageDelegate OnReceiveMessageDelegate;
+FFPOnlinePlayerReceiveMessageDelegate OnReceiveMessage;
 
 // 发送聊天信息，本地或服务器调用
 UFUNCTION(BlueprintCallable, Category = "FPOnline")
