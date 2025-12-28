@@ -163,6 +163,11 @@ FTransform CharacterTransform;
 // @param InSpawnTransform bIsPlayerStart = false 时有效，InSpawnTransform位置不为零时，在此位置生成，否则直接使用CharacterTransform
 UFUNCTION(BlueprintCallable, Category = "FPOnline")
 void ChangeCharacter(TSubclassOf<APawn> NewPawnClass = nullptr, bool bIsPlayerStart = false, const FTransform& InSpawnTransform = FTransform());
+
+// 玩家Pawn死亡时调用
+// @param InRespawnDelay 复活时间，等于0时立即复活
+UFUNCTION(BlueprintCallable, Category = "FPOnline")
+void PlayerPawnDied(float InRespawnDelay = 0.0f);
 ```
 
 4、调用UFPOnlineFunctionLibrary的函数切换地图或调用子系统功能，这些函数可以根据情况使用
@@ -240,11 +245,6 @@ static void SetServerTimeSeconds(const UObject* WorldContextObject, int32 InTime
 // 获取服务器时间
 UFUNCTION(BlueprintCallable, meta = (WorldContext = "WorldContextObject"), Category = "FPOnline")
 static int32 GetServerTimeSeconds(const UObject* WorldContextObject);
-
-// 玩家Pawn死亡时调用
-// @param InRespawnDelay 复活时间，等于0时立即复活
-UFUNCTION(BlueprintCallable, meta = (WorldContext = "WorldContextObject"), Category = "FPOnline")
-static void PlayerPawnDied(const UObject* WorldContextObject, APlayerController* InPlayer, float InRespawnDelay = 0.0f);
 
 // 设置玩家ID：本地调用，可以通过APlayerState获取玩家ID
 UFUNCTION(BlueprintCallable, meta = (WorldContext = "WorldContextObject"), Category = "FPOnline")
