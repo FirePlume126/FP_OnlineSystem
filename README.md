@@ -45,6 +45,7 @@ YouTube: [FirePlume126](https://www.youtube.com/@FirePlume126)
 [ServerSettings]
 bHasServerSettings=True
 bServerCreateSession=True
+SessionCreationDelay=2
 ServerSaveCycle=600
 
 [SessionsSettings]
