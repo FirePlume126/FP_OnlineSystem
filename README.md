@@ -37,7 +37,7 @@ YouTube: [FirePlume126](https://www.youtube.com/@FirePlume126)
 |:-:|:-:|:-:|:-:|:-:|
 |UserSettings.sav|保存玩家信息，主要包括玩家ID和名称，玩家ID不支持修改|客户端|游戏启动时|修改时|
 |ServerArchive_地图名称.sav|保存服务器存档，主要包括玩家信息列表、服务器时间和自定义服务器数据|服务器|创建服务器|玩家退出游戏、退出服务器、周期性保存|
-|Player_"玩家ID".sav|保存玩家游戏数据(类如：位置、属性等)，每个玩家对应一个存档|服务器|玩家加入游戏|更换`Pawn`(除了加入游戏更换`Pawn`)、玩家退出游戏、周期性保存|
+|PlayerArchive_"玩家ID".sav|保存玩家游戏数据(类如：位置、属性等)，每个玩家对应一个存档|服务器|玩家加入游戏|更换`Pawn`(除了加入游戏更换`Pawn`)、玩家退出游戏、周期性保存|
 |ServerSettings.ini|专用服务器配置文件|服务器|创建专用服务器|手动修改|
 
 专用服务器配置文件：ServerSettings.ini
@@ -87,8 +87,8 @@ bStartAfterCreate=False
 |MainMenu|`TSoftObjectPtr<UWorld>`|主菜单地图|
 |Maps|`TArray<TSoftObjectPtr<UWorld>>`|可以切换的地图，专用服务器可以通过ServerSettings.ini设置要切换的地图名称|
 |ServerSaveCycle|`float`|服务器保存周期，专用服务器在ServerSettings.ini中设置|
-|SaveServerDataClass|`TSubclassOf<UFPOnlineSaveServerArchive>`|保存服务器数据的类，服务器用来保存服务器存档|
-|SavePlayerDataClass|`TSubclassOf<USaveGame>`|保存玩家数据的类，服务器用来保存玩家存档|
+|SaveServerArchiveClass|`TSubclassOf<UFPOnlineSaveServerArchive>`|保存服务器数据的类，服务器用来保存服务器存档|
+|SavePlayerArchiveClass|`TSubclassOf<USaveGame>`|保存玩家数据的类，服务器用来保存玩家存档|
 
 ![FPOnlineSystemSettings](https://github.com/FirePlume126/FP_OnlineSystem/blob/main/Images/FPOnlineSystemSettings.png)
 
@@ -130,7 +130,6 @@ void AMyPlayerController::OnUnPossess()
 3、给需要联机的`APlayerController`添加`FPOnlinePlayerComponent`组件，并添加`FPOnlinePlayerInterface`接口，重写接口函数`GetOnlinePlayerComponent()`。
 可以根据需要绑定组件的委托或调用组件的函数
 ```c++
-// .h
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FFPOnlinePlayerSimpleDelegate);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FFPOnlinePlayerDataOperationDelegate, USaveGame*, NewSaveObject, EFPOnlinePlayerDataOperation, Operation);
 
@@ -146,15 +145,15 @@ FFPOnlinePlayerSimpleDelegate OnBanPlayerJoinGame;
 UPROPERTY(BlueprintAssignable, Category = "FPOnline")
 FFPOnlinePlayerSimpleDelegate OnJoinGameChangePawnCompleted;
 
-// 检测世界分区流送，加载流送完成后生成角色
-UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "FPOnline")
-bool bCheckWorldPartitionStreaming = true;
+// 获取玩家唯一ID，可以用来设置玩家在服务器的状态，弃用PlayerState的PlayerId
+UFUNCTION(BlueprintCallable, Category = "FPOnline")
+FString GetPlayerUniqueId() const;
 
-// 加入游戏要更换的APawn类，在委托OnPlayerDataOperation加载存档时，修改此变量可以生成玩家职业对应的Pawn
+// 加入游戏要更换的APawn类，在委托OnPlayerDataOperationDelegate加载存档时，修改此变量可以生成玩家职业对应的Pawn
 UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "FPOnline")
 TSubclassOf<APawn> PlayerPawnClass;
 
-// 生成角色的变换，在委托OnPlayerDataOperation加载存档时，修改此变量可以在此位置生成Pawn
+// 生成角色的变换，在委托OnPlayerDataOperationDelegate加载存档时，修改此变量可以在此位置生成Pawn
 UPROPERTY(BlueprintReadWrite, Category = "FPOnline")
 FTransform CharacterTransform;
 
@@ -190,7 +189,7 @@ static FString GetMapURL(const FString& InMapName);
 UFUNCTION(BlueprintPure, Category = "FPOnline")
 static TArray<FString> GetAllMapName();
 
-// 获取地图名称
+// 获取地图名称，保存在硬盘，重启游戏默认选择的地图
 UFUNCTION(BlueprintPure, meta = (WorldContext = "WorldContextObject"), Category = "FPOnline")
 static FString GetMapName(const UObject* WorldContextObject);
 
@@ -217,43 +216,67 @@ static void CallClientTravel(const UObject* WorldContextObject, const FString& I
 UFUNCTION(BlueprintCallable, meta = (WorldContext = "WorldContextObject"), Category = "FPOnline")
 static void OpenMainMenu(const UObject* WorldContextObject);
 
-//====================================子系统功能====================================>>
+//====================================服务器功能====================================>>
 
 // 玩家升级时更新
-UFUNCTION(BlueprintCallable, meta = (WorldContext = "WorldContextObject"), Category = "FPOnline")
-static void UpdateWhenUpLevelPlayer(const UObject* WorldContextObject, int32 InPlayerId, int32 InLevel);
+UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, meta = (WorldContext = "WorldContextObject"), Category = "FPOnline")
+static void UpdateWhenUpLevelPlayer(const UObject* WorldContextObject, const FString& InUniqueId, int32 InLevel);
 
 // 拉黑或取消拉黑玩家时更新
-UFUNCTION(BlueprintCallable, meta = (WorldContext = "WorldContextObject"), Category = "FPOnline")
-static void UpdateWhenBannedPlayer(const UObject* WorldContextObject, int32 InPlayerId, bool bInHasBan);
+UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, meta = (WorldContext = "WorldContextObject"), Category = "FPOnline")
+static void UpdateWhenBannedPlayer(const UObject* WorldContextObject, const FString& InUniqueId, bool bInHasBan);
 
 // 删除玩家存档时更新
-UFUNCTION(BlueprintCallable, meta = (WorldContext = "WorldContextObject"), Category = "FPOnline")
-static void UpdateWhenRemovePlayer(const UObject* WorldContextObject, int32 InPlayerId);
+UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, meta = (WorldContext = "WorldContextObject"), Category = "FPOnline")
+static void UpdateWhenRemovePlayer(const UObject* WorldContextObject, const FString& InUniqueId);
 
-// 获取玩家信息列表
-UFUNCTION(BlueprintCallable, meta = (WorldContext = "WorldContextObject"), Category = "FPOnline")
-static TArray<FFPOnlinePlayersInfo> GetPlayersInfoList(const UObject* WorldContextObject);
+// 获取玩家信息映射表
+UFUNCTION(BlueprintPure, BlueprintAuthorityOnly, meta = (WorldContext = "WorldContextObject"), Category = "FPOnline")
+static TMap<FString, FFPOnlinePlayerInfo> GetPlayerInfoMap(const UObject* WorldContextObject);
 
-// 获取在线玩家控制器列表
-UFUNCTION(BlueprintCallable, meta = (WorldContext = "WorldContextObject"), Category = "FPOnline")
-static TArray<APlayerController*> GetPlayerControllerList(const UObject* WorldContextObject);
+// 获取在线玩家数据映射表
+UFUNCTION(BlueprintPure, BlueprintAuthorityOnly, meta = (WorldContext = "WorldContextObject"), Category = "FPOnline")
+static TMap<FString, FFPOnlinePlayerData> GetOnlinePlayerDataMap(const UObject* WorldContextObject);
 
 // 设置服务器时间，仅用来作弊
-UFUNCTION(BlueprintCallable, meta = (WorldContext = "WorldContextObject"), Category = "FPOnline")
-static void SetServerTimeSeconds(const UObject* WorldContextObject, int32 InTime);
+UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, meta = (WorldContext = "WorldContextObject"), Category = "FPOnline")
+static void SetServerTimeSeconds(const UObject* WorldContextObject, double InTimeSeconds);
 
 // 获取服务器时间
-UFUNCTION(BlueprintCallable, meta = (WorldContext = "WorldContextObject"), Category = "FPOnline")
-static int32 GetServerTimeSeconds(const UObject* WorldContextObject);
+UFUNCTION(BlueprintPure, BlueprintAuthorityOnly, meta = (WorldContext = "WorldContextObject"), Category = "FPOnline")
+static double GetServerTimeSeconds(const UObject* WorldContextObject);
 
-// 设置玩家ID：本地调用，可以通过APlayerState获取玩家ID
-UFUNCTION(BlueprintCallable, meta = (WorldContext = "WorldContextObject"), Category = "FPOnline")
-static void SetPlayerId(const UObject* WorldContextObject, int32 NewPlayerId);
+//====================================用户设置====================================>>
 
-// 设置玩家名称：本地调用，可以通过APlayerState获取玩家名称
+// 设置玩家唯一ID，本地调用
+UFUNCTION(BlueprintCallable, meta = (WorldContext = "WorldContextObject"), Category = "FPOnline")
+static void SetPlayerUniqueId(const UObject* WorldContextObject, const FString& NewUniqueId);
+
+// 设置玩家名称，本地调用，可以通过APlayerState获取玩家名称
 UFUNCTION(BlueprintCallable, meta = (WorldContext = "WorldContextObject"), Category = "FPOnline")
 static void SetPlayerName(const UObject* WorldContextObject, const FString& NewPlayerName);
+
+// 获取玩家唯一ID，本地调用，服务器通过UFPOnlinePlayerComponent获取玩家唯一ID
+UFUNCTION(BlueprintPure, meta = (WorldContext = "WorldContextObject"), Category = "FPOnline")
+static FString GetPlayerUniqueId(const UObject* WorldContextObject);
+
+//====================================其他功能====================================>>
+
+// 获取平台名称
+UFUNCTION(BlueprintPure, Category = "FPOnline")
+static FName GetPlatformName();
+
+// 是否基于平台
+UFUNCTION(BlueprintPure, Category = "FPOnline")
+static bool IsBasedPlatform();
+
+// 获取构建唯一ID，在DefaultEngine.ini中[FPOnlineSettings]下设置BuildUniqueId
+UFUNCTION(BlueprintPure, Category = "FPOnline")
+static int32 GetBuildUniqueId();
+
+// 获取当前地图名称
+UFUNCTION(BlueprintPure, meta = (WorldContext = "WorldContextObject"), Category = "FPOnline")
+static FString GetCurrentMapName(const UObject* WorldContextObject);
 
 // 获取网络模式
 UFUNCTION(BlueprintPure, meta = (WorldContext = "WorldContextObject", DisplayName = "GetNetMode"), Category = "FPOnline")
@@ -295,21 +318,7 @@ FFPOnlineStartSessionCompleteDelegate OnStartSessionComplete;
 FFPOnlineUpdateSessionCompleteDelegate OnUpdateSessionComplete;
 ```
 
-6、没联机的时候(开始游戏界面)，`APlayerController`不需要继承`FPOnlinePlayerInterface`和添加`FPOnlinePlayerComponent`，这时候如果要获取ID和名称，可以通过`FPOnlineManagerSubsystem`直接获取。也可以设置给玩家状态后，再通过玩家状态获取
-
-```c++
-void AMyPlayerState::BeginPlay()
-{
-	Super::BeginPlay();
-	if (UFPOnlineManagerSubsystem* OnlineManager = GetGameInstance()->GetSubsystem<UFPOnlineManagerSubsystem>())
-	{
-		SetPlayerId(OnlineManager->GetPlayerId());
-		SetPlayerName(OnlineManager->GetPlayerName());
-	}	
-}
-```
-
-7、调用`FPOnlinePlayerComponent`的函数添加聊天消息功能
+6、调用`FPOnlinePlayerComponent`的函数添加聊天消息功能
 
 ```c++
 // 接收聊天消息委托，绑定委托后把消息添加到UI(仅在本地执行)
